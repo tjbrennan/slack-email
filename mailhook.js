@@ -1,7 +1,6 @@
 var MailParser = require('mailparser').MailParser; // https://github.com/andris9/mailparser
 var request = require('request');
 var sanitize = require('sanitize-filename');
-var through = require('through');
 
 module.exports = function (req, res, next) {
   var mailparser = new MailParser({
@@ -9,10 +8,13 @@ module.exports = function (req, res, next) {
     streamAttachments : false
   });
 
+  // attachment stream is outdated and thus not supported.
+  // https://github.com/andris9/mailparser/issues/91
+
   // mailparser.on('attachment', function (attachment) {
   //   var formData = {
   //     token : res.locals.slack.apiToken,
-  //     file : ,
+  //     file : attachment.stream,
   //     filename : attachment.generatedFileName,
   //     title : attachment.fileName,
   //     channels : res.locals.slack.channels
@@ -24,63 +26,38 @@ module.exports = function (req, res, next) {
   //     formData : formData
   //   }, function (error, response, body) {
   //     if (error) {
-  //       return next(error);
+  //       console.error(error);
+  //     } else if (response.statusCode !== 200) {
+  //       console.error(new Error(body));
   //     }
-  //
-  //     console.log(response.statusCode, body);
-  //
   //   });
   // });
 
   mailparser.on('end', function (mailObject) {
-    console.dir(mailObject);
+    var formData = {
+      token : res.locals.slack.apiToken,
+      content : mailObject.text,
+      filename : sanitize(mailObject.subject, { replacement : '_' }),
+      title : mailObject.subject,
+      initial_comment : 'From: ' + mailObject.headers.from +
+                        '\nTo: ' + mailObject.headers.to +
+                        '\nSubject: ' + mailObject.subject,
+      channels : res.locals.slack.channels
+    }
 
     request({
       uri : 'https://slack.com/api/files.upload',
       method : 'POST',
-      formData : {
-        token : res.locals.slack.apiToken,
-        content : mailObject.text,
-        filename : sanitize(mailObject.subject, { replacement : '_' }),
-        title : mailObject.subject,
-        initial_comment : 'To: ' + mailObject.headers.to +
-                          '\nFrom: ' + mailObject.headers.from +
-                          '\nSubject: ' + mailObject.subject,
-        channels : res.locals.slack.channels
-      }
+      formData : formData
     }, function (error, response, body) {
       if (error) {
         return next(error);
+      } else if (response.statusCode !== 200) {
+        return next(new Error(body));
       }
 
-      console.log(response.statusCode, body);
-
+      return res.status(200).end();
     });
-
-    mailObject.attachments.forEach(function (attachment) {
-      console.log(attachment.content);
-      var formData = {
-        token : res.locals.slack.apiToken,
-        file : attachment.content,
-        filename : attachment.generatedFileName,
-        title : attachment.fileName,
-        channels : res.locals.slack.channels
-      };
-
-      request({
-        uri : 'https://slack.com/api/files.upload',
-        method : 'POST',
-        formData : formData
-      }, function (error, response, body) {
-        if (error) {
-          return next(error);
-        }
-
-        console.log(response.statusCode, body);
-
-      });
-    })
-
   });
 
   mailparser.write(req.body.message);

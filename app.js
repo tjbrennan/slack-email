@@ -9,7 +9,7 @@ var port = process.env.PORT || 3000;
 // body parser middleware
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// set locals
+// set slack values
 app.use(function (req, res, next) {
   res.locals.slack = {
     apiToken : process.env.SLACK_API_TOKEN,
@@ -24,7 +24,7 @@ app.use(function (req, res, next) {
 app.post('/email', mailHook);
 
 
-// basic error handler
+// error handler
 app.use(function (err, req, res, next) {
   console.error(err.stack);
   res.status(400).send(err.message);
@@ -32,5 +32,5 @@ app.use(function (err, req, res, next) {
 
 
 app.listen(port, function () {
-  console.log('Slack email listening on port ' + port);
+  console.log('Slack email hook listening on port ' + port);
 });
